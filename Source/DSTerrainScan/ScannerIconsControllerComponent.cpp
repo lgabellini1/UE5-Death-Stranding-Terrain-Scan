@@ -148,6 +148,9 @@ void UScannerIconsControllerComponent::BeginPlay()
 	
 	// Setup SceneCapture(s) and target(s)
 
+	DepthSceneCapture->CaptureSource = SCS_SceneDepth;
+	NormalsSceneCapture->CaptureSource = SCS_Normal;
+
 	DepthRT = DepthSceneCapture->TextureTarget;
 	NormalsRT = NormalsSceneCapture->TextureTarget;
 
