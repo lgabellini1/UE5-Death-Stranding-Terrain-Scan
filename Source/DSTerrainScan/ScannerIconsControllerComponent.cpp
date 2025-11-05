@@ -151,6 +151,11 @@ void UScannerIconsControllerComponent::BeginPlay()
 	DepthSceneCapture->CaptureSource = SCS_SceneDepth;
 	NormalsSceneCapture->CaptureSource = SCS_Normal;
 
+	DepthSceneCapture->bCaptureEveryFrame = false;
+	DepthSceneCapture->bCaptureOnMovement = false;
+	NormalsSceneCapture->bCaptureEveryFrame = false;
+	NormalsSceneCapture->bCaptureOnMovement = false;
+
 	DepthRT = DepthSceneCapture->TextureTarget;
 	NormalsRT = NormalsSceneCapture->TextureTarget;
 
