@@ -170,6 +170,7 @@ public:
 	 *	Starts the scan process from this component's parent
 	 *	world position and facing direction.
 	 */
+	UFUNCTION(BlueprintCallable)
 	void StartScannerLifecycle();
 
 	constexpr float GetScannerFinalRange() const;

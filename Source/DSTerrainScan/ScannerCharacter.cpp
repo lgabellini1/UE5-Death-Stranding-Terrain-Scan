@@ -48,7 +48,7 @@ AScannerCharacter::AScannerCharacter()
 	ScannerIconsController = CreateDefaultSubobject<UScannerIconsControllerComponent>(TEXT("IconsController"));
 
 	FootprintController = CreateDefaultSubobject<UFootprintControllerComponent>(TEXT("FootprintController"));
-
+	
 	/* Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	are set in the derived blueprint asset named ScannerCharacter (to avoid direct content references in C++). */
 }
@@ -87,6 +87,7 @@ void AScannerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 }
 
+/*
 void AScannerCharacter::NotifyControllerChanged()
 {
 	Super::NotifyControllerChanged();
@@ -100,6 +101,7 @@ void AScannerCharacter::NotifyControllerChanged()
 		}
 	}
 }
+*/
 
 void AScannerCharacter::Move(const FInputActionValue& Value)
 {
@@ -129,7 +131,7 @@ void AScannerCharacter::Look(const FInputActionValue& Value)
 	}
 }
 
-void AScannerCharacter::Scan(const FInputActionValue&)
+void AScannerCharacter::Scan()
 {
 	if (IsValid(ScannerController) && IsValid(ScannerIconsController))
 	{
@@ -137,9 +139,12 @@ void AScannerCharacter::Scan(const FInputActionValue&)
 		{
 			return;
 		}
-		
-		ScannerController->StartScannerLifecycle();
-		ScannerIconsController->StartIconsLifecycle();
-		FootprintController->StartFootprintsLifecycle();
+
+		if (bScannerActive)
+			ScannerController->StartScannerLifecycle();
+		if (bIconsActive)
+			ScannerIconsController->StartIconsLifecycle();
+		if (bFootprintsActive)
+			FootprintController->StartFootprintsLifecycle();
 	}
 }

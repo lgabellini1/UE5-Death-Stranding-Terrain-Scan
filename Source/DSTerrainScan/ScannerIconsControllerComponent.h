@@ -20,11 +20,12 @@ enum class ETerrainType : int32
 	Regular,
 	Steep,
 	Dangerous,
-	
-	// Water terrains
 	ShallowWater,
 	DeepWater,
-	DangerousWater
+	DangerousWater,
+	Rocky,
+	Vegetation,
+	Path
 };
 
 
@@ -51,15 +52,11 @@ private: /* Blueprint-exposed parameters */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Grid Settings", meta = (AllowPrivateAccess = "true"))
 	int32 GridY = 140;
 
-	/**
-	 * Distance between the icons from each other in the grid.
-	 */
+	/** Distance between the icons from each other in the grid. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Grid Settings", meta = (AllowPrivateAccess = "true"))
 	float Padding = 60.0f;
 
-	/**
-	 * Vertical offset of the icon from the terrain.
-	 */
+	/** Vertical offset of the icon from the terrain. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Grid Settings", meta = (AllowPrivateAccess = "true"))
 	float ZOffset = 40.0f;
 
@@ -74,21 +71,15 @@ private: /* Blueprint-exposed parameters */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Thresholds", meta = (AllowPrivateAccess = "true"))
 	float RegularTerrainThreshold = 0.8f;
 
-	/**
-	 * Maximum slope of steep terrain. See RegularTerrainThreshold for more info.
-	 */
+	/** Maximum slope of steep terrain. See RegularTerrainThreshold for more info. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Thresholds", meta = (AllowPrivateAccess = "true"))
 	float SteepTerrainThreshold = 0.7f;
 
-	/**
-	 * Maximum water depth (in Unreal Units) for shallow water.
-	 */
+	/** Maximum water depth (in Unreal Units) for shallow water. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Thresholds", meta = (AllowPrivateAccess = "true"))
 	float ShallowWaterThreshold = 100.0f;
 
-	/**
-	 * Maximum water depth (in Unreal Units) for deep water.
-	 */
+	/** Maximum water depth (in Unreal Units) for deep water. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Thresholds", meta = (AllowPrivateAccess = "true"))
 	float DeepWaterThreshold = 500.0f;
 
@@ -103,6 +94,15 @@ private: /* Blueprint-exposed parameters */
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Sprite Sizes", meta = (AllowPrivateAccess = "true"))
 	float WaterIconsSize = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Sprite Sizes", meta = (AllowPrivateAccess = "true"))
+	float RockyIconsSize = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Sprite Sizes", meta = (AllowPrivateAccess = "true"))
+	float VegetationIconsSize = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Sprite Sizes", meta = (AllowPrivateAccess = "true"))
+	float PathIconsSize = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Sprite Sizes", meta = (AllowPrivateAccess = "true"))
 	float FlareSize = 750.0f;
@@ -125,27 +125,21 @@ private: /* Blueprint-exposed parameters */
 	
 	/* Opacity animation */
 
-	/**
-	 * Each cycle consists of a single reveal-fade animation.
-	 */
+	/** Each cycle consists of a single reveal-fade animation. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Opacity Animation", meta = (AllowPrivateAccess = "true"))
 	int32 TotalAnimationCycles = 2;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Opacity Animation", meta = (AllowPrivateAccess = "true"))
 	float OpacityAnimationSpeed = 2000.0f;
 
-	/**
-	 * Strength of the fade step. With lower values you get a sharper animation.
-	 */
+	/** Strength of the fade step. With lower values you get a sharper animation. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Opacity Animation", meta = (AllowPrivateAccess = "true"))
 	float FadeIntensityFactor = 4000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Opacity Animation", meta = (AllowPrivateAccess = "true"))
 	float DangerIconFadeoutTime = 5.0f;
 
-	/**
-	 *  How much space before the scan edge (in Unreal Units) the red icons show up in the effect.
-	 */
+	/** How much space before the scan edge (in Unreal Units) the red icons show up in the effect. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Opacity Animation", meta = (AllowPrivateAccess = "true"))
 	float DangerIconAppearOffset = 2000.0f;
 
@@ -162,26 +156,43 @@ private: /* Blueprint-exposed parameters */
 	float WaterLevelHeight = -3910.0f;
 
 	
-	/**
-	 * Captures terrain depth into a texture (used to derive particle height).
-	 */
+	/** Captures terrain depth into a texture (used to derive particle height). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneCaptureComponent2D> DepthSceneCapture;
 
-	/**
-	 * Captures terrain normals into a texture (used to derive particle inclination with respect to the terrain).
-	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneCaptureComponent2D> CustomDepthSceneCapture;
+
+	/** Captures terrain normals into a texture (used to derive particle inclination with respect to the terrain). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneCaptureComponent2D> NormalsSceneCapture;
+
+	/** Captures IDs representing alternative terrain types. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneCaptureComponent2D> IDsSceneCapture;
 	
 	/** Additional SceneCaptureComponent2D height. Any value works as long we do not
 	 *	intersect geometry (for ortho perspective). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
-	float SceneCaptureHeight = 40.0f;
+	float SceneCaptureHeightOffset = 40.0f;
+
+	/**
+	 *  Resolution height of the render target textures.
+	 *  Width is then calculated according to their aspect ratio, which is in turn derived from the particle grid dimensions.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
+	int32 RenderTargetsHeight = 512;
 	
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Other", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMaterialParameterCollection> MPC;
+
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug", meta = (AllowPrivateAccess = "true"))
+	bool bEnableCameraVisualization;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UStaticMeshComponent> CameraMesh;
 
 protected:
 	virtual void BeginPlay() override;
@@ -189,7 +200,8 @@ protected:
 public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 	                           FActorComponentTickFunction* ThisTickFunction) override;
-	
+
+	UFUNCTION(BlueprintCallable)
 	void StartIconsLifecycle();
 
 	bool IsEffectActive() const;
@@ -208,6 +220,13 @@ private: /* Class internals */
 	float RevealAnimationDuration() const { return MaxEffectDistance() / OpacityAnimationSpeed; }
 
 	float FadeAnimationDuration() const { return (MaxEffectDistance() + FadeIntensityFactor) / OpacityAnimationSpeed; }
+
+
+	void SetupSceneCaptureComponent(USceneCaptureComponent2D* const SceneCaptureComponent,
+		ESceneCaptureSource CaptureSource) const;
+
+	void PlaceSceneCaptureComponent(USceneCaptureComponent2D* const SceneCaptureComponent,
+		const FScannerState& CurrentScannerState, const FVector& Movement) const;
 	
 	
 	float ElapsedTime = -1.f;
@@ -218,15 +237,10 @@ private: /* Class internals */
 	UPROPERTY()
 	TObjectPtr<UScannerControllerComponent> ScannerController;
 
-	/**
-	 *	World-positioned Niagara component for icon generation.
-	 */
+	/** World-positioned Niagara component for icon generation. */
 	UPROPERTY()
 	TObjectPtr<UNiagaraComponent> IconsNiagaraComponent;
-	
-	UPROPERTY()
-	TObjectPtr<UTextureRenderTarget2D> DepthRT;
-	
-	UPROPERTY()
-	TObjectPtr<UTextureRenderTarget2D> NormalsRT;
 };
+
+/** Utility for camera frustum visualization of a SceneCapture component. */
+void DrawCameraViewFrustum(const UWorld* World, USceneCaptureComponent2D* SceneCaptureComponent);

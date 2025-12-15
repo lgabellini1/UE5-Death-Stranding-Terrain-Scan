@@ -4,6 +4,9 @@
 #include "Components/ActorComponent.h"
 #include "FootprintControllerComponent.generated.h"
 
+class UScannerControllerComponent;
+class UScannerIconsControllerComponent;
+
 UENUM(BlueprintType)
 enum class EFootstepType : uint8
 {
@@ -24,7 +27,10 @@ struct FFootprintData
 
 	float Age;
 
-	bool IsHighlight;
+	/** Expected lifetime: footprint dies when Age >= Lifetime. */
+	float Lifetime;
+
+	bool IsHighlighted;
 
 	UPROPERTY()
 	UDecalComponent* Decal;
@@ -41,30 +47,25 @@ public: // Constructor(s)
 
 private:
 	
-	/**
-	 * Parent material for the instances.
-	 */
+	/** Footprint parent material. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decal", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UMaterialInterface> DecalMaterial;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Decal", meta = (AllowPrivateAccess = "true"))
 	FVector DecalSize;
 
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Timings", meta = (AllowPrivateAccess = "true"))
+
+ 	/** Time in seconds for the lifetime of a regular footprint, not including fade time. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Time", meta = (AllowPrivateAccess = "true"))
 	float RegularFootprintLifetime = 10.f;
 	
-	/**
-	 * Time in seconds it takes for the footprint to fade permanently and die, after lifetime expiration.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Timings", meta = (AllowPrivateAccess = "true"))
+	/** Time in seconds it takes for the footprint to fade permanently and die, after lifetime expiration. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Time", meta = (AllowPrivateAccess = "true"))
 	float FadeTime = 5.f;
 
-	/**
-	 * Time in seconds it takes for the highlight effect to fade and reveal a regular footprint.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Timings", meta = (AllowPrivateAccess = "true"))
-	float HighlightFadeTime = 10.f;	
+	/** Time in seconds it takes for the highlight effect to fade. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Time", meta = (AllowPrivateAccess = "true"))
+	float HighlightFadeTime = 10.f;
 	
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MPC", meta = (AllowPrivateAccess = "true"))
@@ -90,12 +91,20 @@ private:
 	
 	TOptional<FFootprintData> CheckFootstepCollision(EFootstepType FootstepType) const;
 
+	float ComputeLifetime(bool bHighlighted) const;
+
+	UMaterialInstanceDynamic* CreateFootstepDMI(bool bRight, bool bHighlighted);
+
 	/**
 	 * Collection of all the footprints currently present in-game.
 	 */
 	TArray<FFootprintData> Footprints;
-	
-	float GetFootprintLifetime(const FFootprintData& Footprint) const;
+
+	UPROPERTY()
+	UScannerControllerComponent* Scanner;
+
+	UPROPERTY()
+	UScannerIconsControllerComponent* Icons;
 
 private: // Decal DMIs
 
@@ -114,5 +123,5 @@ private: // Decal DMIs
 	UPROPERTY()
 	UMaterialInstanceDynamic* RightFootstepHighlight;
 	
-	constexpr UMaterialInstanceDynamic* GetFootprintMaterial(const FFootprintData& Footprint) const;
+	UMaterialInstanceDynamic* GetFootprintMaterial(const FFootprintData& Footprint) const;
 };

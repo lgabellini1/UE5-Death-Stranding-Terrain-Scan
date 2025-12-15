@@ -49,17 +49,26 @@ private: /* Blueprint-exposed parameters*/
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ScanAction;
-
+	
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scanner", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UScannerControllerComponent> ScannerController;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scanner", meta = (AllowPrivateAccess = "true"))
+	bool bScannerActive = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scanner", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UScannerIconsControllerComponent> ScannerIconsController;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scanner", meta = (AllowPrivateAccess = "true"))
+	bool bIconsActive = true;
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Footprints", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UFootprintControllerComponent> FootprintController;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Footprints", meta = (AllowPrivateAccess = "true"))
+	bool bFootprintsActive = true;
 
 public:
 	
@@ -69,7 +78,13 @@ public:
 	 * @param FootstepType left or right foot.
 	 */	
 	UFUNCTION(BlueprintCallable)
-	void OnFootStep(EFootstepType FootstepType);	
+	void OnFootStep(EFootstepType FootstepType);
+
+	void Move(const FInputActionValue& Value);
+
+	void Look(const FInputActionValue& Value);
+
+	void Scan();
 
 protected:
 	virtual void BeginPlay() override;
@@ -78,12 +93,5 @@ protected:
     	
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
-	virtual void NotifyControllerChanged() override;
-
-	
-	void Move(const FInputActionValue& Value);
-
-	void Look(const FInputActionValue& Value);
-
-	void Scan(const FInputActionValue&);
+	//virtual void NotifyControllerChanged() override;
 };

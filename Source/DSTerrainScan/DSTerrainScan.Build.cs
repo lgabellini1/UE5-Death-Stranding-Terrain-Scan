@@ -8,10 +8,9 @@ public class DSTerrainScan : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "Niagara", "Landscape", "Foliage" });
-
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
-
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", 
+			"InputCore", "EnhancedInput", "Niagara", "Landscape", "Foliage", "RuntimeVideoRecorder" });
+		
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		

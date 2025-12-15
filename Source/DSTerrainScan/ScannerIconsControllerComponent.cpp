@@ -5,6 +5,7 @@
 #include "Materials/MaterialParameterCollectionInstance.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "ScannerControllerComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace IconsTextureAtlas
 {
@@ -28,22 +29,18 @@ const TMap<ETerrainType, FIntPoint>& GetTerrainIcons()
 	// represent coordinates inside the icons' texture atlas asset. 
 	static const TMap<ETerrainType, FIntPoint> TerrainIcons
 	{
-			{ ETerrainType::Regular, IconsTextureAtlas::FullSquare },
-			{ ETerrainType::Steep, IconsTextureAtlas::FullSquare },
-			{ ETerrainType::Dangerous, IconsTextureAtlas::Cross },
-			{ ETerrainType::ShallowWater, IconsTextureAtlas::EmptySquare },
-			{ ETerrainType::DeepWater, IconsTextureAtlas::EmptySquare },
-			{ ETerrainType::DangerousWater, IconsTextureAtlas::EmptySquare },
+		{ ETerrainType::Regular, IconsTextureAtlas::FullSquare },
+		{ ETerrainType::Steep, IconsTextureAtlas::FullSquare },
+		{ ETerrainType::Dangerous, IconsTextureAtlas::Cross },
+		{ ETerrainType::ShallowWater, IconsTextureAtlas::EmptySquare },
+		{ ETerrainType::DeepWater, IconsTextureAtlas::EmptySquare },
+		{ ETerrainType::DangerousWater, IconsTextureAtlas::EmptySquare },
+		{ ETerrainType::Rocky, IconsTextureAtlas::Triangle },
+		{ ETerrainType::Vegetation, IconsTextureAtlas::Chevron },
+		{ ETerrainType::Path, IconsTextureAtlas::Circle }
 	};
 	return TerrainIcons;
 }
-
-/**
- *  Fixed height of the normal and depth textures. Width is calculated
- *  according to the aspect ratio of the textures, which is in turn
- *  derived from the particle grid's dimensions ratio.
- */
-constexpr int32 GRenderTargetHeight = 512;
 
 
 UScannerIconsControllerComponent::UScannerIconsControllerComponent()
@@ -54,6 +51,13 @@ UScannerIconsControllerComponent::UScannerIconsControllerComponent()
 	DepthSceneCapture = CreateDefaultSubobject<USceneCaptureComponent2D>("DepthSceneCapture");
 
 	NormalsSceneCapture = CreateDefaultSubobject<USceneCaptureComponent2D>("NormalsSceneCapture");
+
+	IDsSceneCapture = CreateDefaultSubobject<USceneCaptureComponent2D>("IDsSceneCapture");
+
+	CustomDepthSceneCapture = CreateDefaultSubobject<USceneCaptureComponent2D>("CustomDepthSceneCapture");
+
+	CameraMesh = CreateDefaultSubobject<UStaticMeshComponent>("CameraMesh");
+	CameraMesh->SetupAttachment(DepthSceneCapture);
 }
 
 void UScannerIconsControllerComponent::BeginPlay()
@@ -107,6 +111,10 @@ void UScannerIconsControllerComponent::BeginPlay()
 	IconsNiagaraComponent->SetVariableInt(TEXT("Deep Water"), static_cast<int32>(ETerrainType::DeepWater));
 	IconsNiagaraComponent->SetVariableInt(TEXT("Dangerous Water"), static_cast<int32>(ETerrainType::DangerousWater));
 
+	IconsNiagaraComponent->SetVariableInt(TEXT("Rocky Terrain"), static_cast<int32>(ETerrainType::Rocky));
+	IconsNiagaraComponent->SetVariableInt(TEXT("Vegetation Terrain"), static_cast<int32>(ETerrainType::Vegetation));
+	IconsNiagaraComponent->SetVariableInt(TEXT("Path Terrain"), static_cast<int32>(ETerrainType::Path));
+
 	// Thresholds
 	IconsNiagaraComponent->SetVariableFloat(TEXT("RegularTerrainThreshold"), RegularTerrainThreshold);
 	IconsNiagaraComponent->SetVariableFloat(TEXT("SteepTerrainThreshold"), SteepTerrainThreshold);
@@ -123,11 +131,18 @@ void UScannerIconsControllerComponent::BeginPlay()
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Deep Water Icon"), *GetTerrainIcons().Find(ETerrainType::DeepWater));
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Dangerous Water Icon"), *GetTerrainIcons().Find(ETerrainType::DangerousWater));
 
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Rocky Icon"), *GetTerrainIcons().Find(ETerrainType::Rocky));
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Vegetation Icon"), *GetTerrainIcons().Find(ETerrainType::Vegetation));
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Path Icon"), *GetTerrainIcons().Find(ETerrainType::Path));
+
 	// Sprite sizes
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Default Size"), FVector2D{DefaultSize});
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Danger Icon Size"), FVector2D{DangerIconSize});
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Water Icons Size"), FVector2D{WaterIconsSize});
 	IconsNiagaraComponent->SetVariableVec2(TEXT("Flare Size"), FVector2D{FlareSize});
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Rocky Icons Size"), FVector2D{RockyIconsSize});
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Vegetation Icons Size"), FVector2D{VegetationIconsSize});
+	IconsNiagaraComponent->SetVariableVec2(TEXT("Path Icons Size"), FVector2D{PathIconsSize});
 
 	// Sprite colors
 	IconsNiagaraComponent->SetVariableLinearColor(TEXT("Icon Blue"), FLinearColor::FromSRGBColor(IconBlue));
@@ -148,28 +163,12 @@ void UScannerIconsControllerComponent::BeginPlay()
 	
 	// Setup SceneCapture(s) and target(s)
 
-	DepthSceneCapture->CaptureSource = SCS_SceneDepth;
-	NormalsSceneCapture->CaptureSource = SCS_Normal;
+	SetupSceneCaptureComponent(DepthSceneCapture, SCS_SceneDepth);
+	SetupSceneCaptureComponent(NormalsSceneCapture, SCS_Normal);
+	SetupSceneCaptureComponent(IDsSceneCapture, SCS_FinalColorLDR);
+	SetupSceneCaptureComponent(CustomDepthSceneCapture, SCS_FinalColorLDR);
 
-	DepthSceneCapture->bCaptureEveryFrame = false;
-	DepthSceneCapture->bCaptureOnMovement = false;
-	NormalsSceneCapture->bCaptureEveryFrame = false;
-	NormalsSceneCapture->bCaptureOnMovement = false;
-
-	DepthRT = DepthSceneCapture->TextureTarget;
-	NormalsRT = NormalsSceneCapture->TextureTarget;
-
-	float AspectRatio = IconsAreaY() / IconsAreaX();
-	DepthRT->SizeX = NormalsRT->SizeX = FMath::CeilToInt32(GRenderTargetHeight * AspectRatio);
-	DepthRT->SizeY = NormalsRT->SizeY = GRenderTargetHeight;
-
-	DepthSceneCapture->OrthoWidth = IconsAreaY();
-	NormalsSceneCapture->OrthoWidth = IconsAreaY();
-
-	// Do not capture grass as it creates inconsistencies both in icons height and slope calculation.
-	// This can be extended of course with other flags depending on scene composition, landscape layers, etc...
-	DepthSceneCapture->SetShowFlagSettings({{"InstancedGrass",false}});
-	NormalsSceneCapture->SetShowFlagSettings({{"InstancedGrass",false}});
+	CameraMesh->SetVisibility(bEnableCameraVisualization);
 }
 
 void UScannerIconsControllerComponent::TickComponent
@@ -179,7 +178,8 @@ void UScannerIconsControllerComponent::TickComponent
 
 	// Timing logic
 	if (bHasStarted) ElapsedTime += DeltaTime;
-		if (ElapsedTime > TotalEffectDuration())
+	
+	if (ElapsedTime > TotalEffectDuration())
 	{
 		ElapsedTime = -1.f;
 		bHasStarted = false;
@@ -191,7 +191,7 @@ void UScannerIconsControllerComponent::TickComponent
 
 void UScannerIconsControllerComponent::StartIconsLifecycle()
 {
-	if (!IconsNiagaraComponent || !DepthSceneCapture || !NormalsSceneCapture) return;
+	if (!IconsNiagaraComponent || !DepthSceneCapture || !NormalsSceneCapture || !IDsSceneCapture) return;
 
 	FScannerState CurrentScannerState = ScannerController->GetCurrentFrameScannerState();
 	
@@ -208,19 +208,26 @@ void UScannerIconsControllerComponent::StartIconsLifecycle()
 	IconsNiagaraComponent->SetWorldRotation(FRotator{0.0f, CurrentScannerState.Rotation.Yaw, 0.0f});
 	IconsNiagaraComponent->AddWorldOffset(DeltaLocation);
 
-	DepthSceneCapture->SetWorldLocation(CurrentScannerState.Origin + FVector::UpVector * SceneCaptureHeight);
-	DepthSceneCapture->SetWorldRotation(FRotator{-90.0f, CurrentScannerState.Rotation.Yaw, 0.0f});
-	DepthSceneCapture->AddWorldOffset(DeltaLocation);
+	PlaceSceneCaptureComponent(DepthSceneCapture, CurrentScannerState, DeltaLocation);
+	PlaceSceneCaptureComponent(NormalsSceneCapture, CurrentScannerState, DeltaLocation);
+	PlaceSceneCaptureComponent(IDsSceneCapture, CurrentScannerState, DeltaLocation);
+	PlaceSceneCaptureComponent(CustomDepthSceneCapture, CurrentScannerState, DeltaLocation);
 
-	NormalsSceneCapture->SetWorldLocation(CurrentScannerState.Origin + FVector::UpVector * SceneCaptureHeight);
-	NormalsSceneCapture->SetWorldRotation(FRotator{-90.0f, CurrentScannerState.Rotation.Yaw, 0.0f});
-	NormalsSceneCapture->AddWorldOffset(DeltaLocation);
+	if (bEnableCameraVisualization)
+	{
+		CameraMesh->SetWorldLocationAndRotation(DepthSceneCapture->GetComponentLocation(),
+			DepthSceneCapture->GetComponentRotation());
+
+		DrawCameraViewFrustum(GetWorld(), DepthSceneCapture);
+	}
 
 	float CameraZ = DepthSceneCapture->GetComponentLocation().Z;
 	
 	// Capture depth and normals
 	DepthSceneCapture->CaptureScene();
 	NormalsSceneCapture->CaptureScene();
+	IDsSceneCapture->CaptureScene();
+	CustomDepthSceneCapture->CaptureScene();
 
 	// Send data to Niagara.
 	IconsNiagaraComponent->SetVariablePosition(TEXT("ScanOrigin"), CurrentScannerState.Origin);
@@ -234,13 +241,58 @@ void UScannerIconsControllerComponent::StartIconsLifecycle()
 	bHasStarted = true;
 }
 
+void UScannerIconsControllerComponent::SetupSceneCaptureComponent(USceneCaptureComponent2D* const SceneCaptureComponent,
+	ESceneCaptureSource CaptureSource) const
+{
+	SceneCaptureComponent->CaptureSource = CaptureSource;
+	SceneCaptureComponent->bCaptureEveryFrame = false;
+	SceneCaptureComponent->bCaptureOnMovement = false;
+	
+	float AspectRatio = IconsAreaY() / IconsAreaX();
+	SceneCaptureComponent->TextureTarget->SizeX = FMath::CeilToInt32(RenderTargetsHeight * AspectRatio);
+	SceneCaptureComponent->TextureTarget->SizeY = RenderTargetsHeight;
+
+	SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Type::Orthographic;
+	SceneCaptureComponent->OrthoWidth = IconsAreaY() + Padding;
+
+	// Do not capture grass as it creates inconsistencies both in icons height and slope calculation.
+	// This can be extended of course with other flags depending on scene composition, landscape layers, etc...
+	SceneCaptureComponent->SetShowFlagSettings({{"InstancedGrass",false}});
+}
+
+void UScannerIconsControllerComponent::PlaceSceneCaptureComponent(
+	USceneCaptureComponent2D* const SceneCaptureComponent,
+	const FScannerState& CurrentScannerState, const FVector& Movement) const
+{
+	SceneCaptureComponent->SetWorldLocation(CurrentScannerState.Origin + FVector::UpVector * SceneCaptureHeightOffset);
+	SceneCaptureComponent->SetWorldRotation(FRotator{-90.0f, CurrentScannerState.Rotation.Yaw, 0.0f});
+	SceneCaptureComponent->AddWorldOffset(Movement);
+}
+
 float UScannerIconsControllerComponent::TotalEffectDuration() const
 {
-	return ScannerController->GetTotalScanDuration() + DangerIconFadeoutTime + FadeAnimationDuration()
-		+ (RevealAnimationDuration() + FadeAnimationDuration()) * TotalAnimationCycles;
+	return (RevealAnimationDuration() + FadeAnimationDuration()) * TotalAnimationCycles
+		+  FadeAnimationDuration() + DangerIconFadeoutTime;
 }
 
 bool UScannerIconsControllerComponent::IsEffectActive() const
 {
 	return ElapsedTime >= 0 && ElapsedTime <= TotalEffectDuration();
+}
+
+void DrawCameraViewFrustum(const UWorld* World, USceneCaptureComponent2D* SceneCaptureComponent)
+{
+	FMinimalViewInfo CameraView;
+	SceneCaptureComponent->GetCameraView(0.f, CameraView);
+		
+	FMatrix View, Projection, ViewProjection;
+	UGameplayStatics::GetViewProjectionMatrix(CameraView,
+		View, Projection, ViewProjection);
+
+	UKismetSystemLibrary::FlushPersistentDebugLines(World);
+		
+	DrawDebugFrustum(
+		World,
+		ViewProjection.Inverse(),
+		FColor::Orange, true);
 }

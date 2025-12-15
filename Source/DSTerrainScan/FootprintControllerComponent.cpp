@@ -1,4 +1,6 @@
 ﻿#include "FootprintControllerComponent.h"
+
+#include "ScannerCharacter.h"
 #include "Engine/World.h"
 #include "ScannerControllerComponent.h"
 #include "ScannerIconsControllerComponent.h"
@@ -7,6 +9,8 @@
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
+
+constexpr int32 GMaxFootprints = 99;
 
 UFootprintControllerComponent::UFootprintControllerComponent()
 {
@@ -24,23 +28,15 @@ void UFootprintControllerComponent::BeginPlay()
 	{
 		MPCI->SetScalarParameterValue(TEXT("_Footprint_Highlight_Fade_Time"), HighlightFadeTime);
 	}
+
+	Scanner = GetOwner()->GetComponentByClass<UScannerControllerComponent>();
+	Icons = GetOwner()->GetComponentByClass<UScannerIconsControllerComponent>();
 	
 	// Setup the DMIs
-	LeftFootstep = UMaterialInstanceDynamic::Create(DecalMaterial, this);
-	LeftFootstep->SetScalarParameterValue(TEXT("IsRight"), 0.0f);
-	LeftFootstep->SetScalarParameterValue(TEXT("IsHighlighted"), 0.0f);
-
-	LeftFootstepHighlight = UMaterialInstanceDynamic::Create(DecalMaterial, this);
-	LeftFootstepHighlight->SetScalarParameterValue(TEXT("IsRight"), 0.0f);
-	LeftFootstepHighlight->SetScalarParameterValue(TEXT("IsHighlighted"), 1.0f);
-	
-	RightFootstep = UMaterialInstanceDynamic::Create(DecalMaterial, this);
-	RightFootstep->SetScalarParameterValue(TEXT("IsRight"), 1.0f);
-	RightFootstep->SetScalarParameterValue(TEXT("IsHighlighted"), 0.0f);
-
-	RightFootstepHighlight = UMaterialInstanceDynamic::Create(DecalMaterial, this);
-	RightFootstepHighlight->SetScalarParameterValue(TEXT("IsRight"), 1.0f);
-	RightFootstepHighlight->SetScalarParameterValue(TEXT("IsHighlighted"), 1.0f);
+	LeftFootstep = CreateFootstepDMI(false, false);
+	LeftFootstepHighlight = CreateFootstepDMI(false, true);
+	RightFootstep = CreateFootstepDMI(true, false);
+	RightFootstepHighlight = CreateFootstepDMI(true, true);
 
 	// Footprints do not show up on the player character's mesh
 	if (auto* PlayerCharacter = GetOwner<ACharacter>())
@@ -57,78 +53,87 @@ void UFootprintControllerComponent::TickComponent(float DeltaTime, ELevelTick Ti
 		Footprint.Age += DeltaTime;
 	}
 
-	auto* PlayerCharacter = GetOwner<ACharacter>();
-	auto* Scanner = PlayerCharacter->GetComponentByClass<UScannerControllerComponent>();
-	auto* Icons = PlayerCharacter->GetComponentByClass<UScannerIconsControllerComponent>();
+	if (!IsValid(Scanner) || !IsValid(Icons)) return;
 	
-	float CurrentTime = GetWorld()->GetTimeSeconds();
-	float ElapsedTime = CurrentTime - Scanner->GetCurrentFrameScannerState().StartTime;
-	float RelativeHighlightTime = ElapsedTime - Icons->TotalEffectDuration();
+	double CurrentTime = GetWorld()->GetTimeSeconds();
+	double ElapsedTime = CurrentTime - Scanner->GetCurrentFrameScannerState().StartTime;
+	double RelativeHighlightTime = ElapsedTime - Icons->TotalEffectDuration();
 	
 	UMaterialParameterCollectionInstance* MPCI = GetWorld()->GetParameterCollectionInstance(MPC);
 	MPCI->SetScalarParameterValue(TEXT("_Footprint_Relative_Highlight_Time"),
-		FMath::Max(0.f, RelativeHighlightTime));
+		FMath::Clamp(static_cast<float>(RelativeHighlightTime), 0.f, HighlightFadeTime));
 
 	// Clean array from dead footprints
 	Footprints.RemoveAll([this](const FFootprintData& Footprint)
 	{
-		return Footprint.Age >= GetFootprintLifetime(Footprint);
+		return Footprint.Age >= Footprint.Lifetime;
 	});
 }
 
 void UFootprintControllerComponent::HandleFootstep(EFootstepType FootstepType)
 {
-	TOptional<FFootprintData> FootprintFound = CheckFootstepCollision(FootstepType);
+	TOptional<FFootprintData> Hit = CheckFootstepCollision(FootstepType);
+	if (!Hit) return;
 	
-	if (FootprintFound.IsSet())
+	FFootprintData Footprint = Hit.GetValue();
+		
+	if (Icons->IsEffectActive() && Scanner->IsPointInsideScanArea(Footprint.Location))
 	{
-		FFootprintData Footprint = FootprintFound.GetValue();
-		
-		auto* PlayerCharacter = GetOwner<ACharacter>();
-		auto* Scanner = PlayerCharacter->GetComponentByClass<UScannerControllerComponent>();
-		auto* Icons = PlayerCharacter->GetComponentByClass<UScannerIconsControllerComponent>();
-		
-		if (Icons->IsEffectActive() && Scanner->IsPointInsideScanArea(Footprint.Location))
-		{
-			Footprint.IsHighlight = true;
-		}
-
-		UMaterialInstanceDynamic* FootprintDMI = GetFootprintMaterial(Footprint);
-
-		UDecalComponent* FootprintDecal = UGameplayStatics::SpawnDecalAtLocation(GetWorld(),
-			FootprintDMI, DecalSize, Footprint.Location, Footprint.Rotation);
-		
-		FootprintDecal->SetFadeOut(GetFootprintLifetime(Footprint) - FadeTime, FadeTime);
-		
-		Footprint.Decal = FootprintDecal;
-
-		// Save footprint in the controller's memory
-		Footprints.Add(Footprint);
+		Footprint.IsHighlighted = true;
 	}
+
+	UMaterialInstanceDynamic* FootprintDMI = GetFootprintMaterial(Footprint);
+
+	Footprint.Lifetime = ComputeLifetime(Footprint.IsHighlighted);
+
+	UDecalComponent* FootprintDecal = UGameplayStatics::SpawnDecalAtLocation(GetWorld(),
+		FootprintDMI, DecalSize, Footprint.Location, Footprint.Rotation, Footprint.Lifetime);
+		
+	FootprintDecal->SetFadeOut(Footprint.Lifetime - FadeTime, FadeTime, false);
+		
+	Footprint.Decal = FootprintDecal;
+
+	// Save footprint in the controller's memory
+	if (Footprints.Num() == GMaxFootprints)
+	{
+		UDecalComponent* Decal = Footprints[0].Decal;
+			
+		Footprints.RemoveAt(0, EAllowShrinking::No);
+			
+		Decal->DestroyComponent();
+		if (AActor* Owner = Decal->GetOwner())
+		{
+			Owner->Destroy();
+		}
+	}
+	Footprints.Add(Footprint);
 }
 
 void UFootprintControllerComponent::StartFootprintsLifecycle()
 {
-	auto* Scanner = GetOwner()->GetComponentByClass<UScannerControllerComponent>();
-	
 	for (FFootprintData& Footprint : Footprints)
 	{
-		bool bWasHighlighted = Footprint.IsHighlight;
-		Footprint.IsHighlight = Scanner->IsPointInsideScanArea(Footprint.Location);
+		if (!Footprint.Decal) break;
 		
-		// Case 1: Footprint highlighted by a previous scan, highlighted again. 
-		if (bWasHighlighted && Footprint.IsHighlight)
+		bool bWasHighlighted = Footprint.IsHighlighted;
+		Footprint.IsHighlighted = Scanner->IsPointInsideScanArea(Footprint.Location);
+		
+		bool bHighlightChange = Footprint.IsHighlighted != bWasHighlighted;
+
+		if (bHighlightChange || Footprint.IsHighlighted)
 		{
 			Footprint.Age = 0.f;
+			Footprint.Lifetime = ComputeLifetime(Footprint.IsHighlighted);
+
+			if (bHighlightChange)
+			{
+				UMaterialInstanceDynamic* NewMaterial = GetFootprintMaterial(Footprint);
+				Footprint.Decal->SetDecalMaterial(NewMaterial);
+			}
+
+			Footprint.Decal->SetLifeSpan(Footprint.Lifetime);
+			Footprint.Decal->SetFadeOut(Footprint.Lifetime - FadeTime, FadeTime, false);
 		}
-		// Case 2: Footprint highlighted by a previous scan, now outside. 
-		// Case 3: Regular footprint now highlighted. 
-		else if (bWasHighlighted || Footprint.IsHighlight)
-		{
-			Footprint.Age = 0.f;
-			if (Footprint.Decal) Footprint.Decal->SetDecalMaterial(GetFootprintMaterial(Footprint));
-		}
-		// Case 4: Regular footprint still outside scan, do nothing. 
 	}
 }
 
@@ -165,28 +170,41 @@ TOptional<FFootprintData> UFootprintControllerComponent::CheckFootstepCollision(
 	}
 }
 
-constexpr UMaterialInstanceDynamic* UFootprintControllerComponent::GetFootprintMaterial(const FFootprintData& Footprint) const
+UMaterialInstanceDynamic* UFootprintControllerComponent::GetFootprintMaterial(const FFootprintData& Footprint) const
 {
 	switch (Footprint.Type)
 	{
 		case EFootstepType::Left:
-			return Footprint.IsHighlight ? LeftFootstepHighlight : LeftFootstep;
+			return Footprint.IsHighlighted ? LeftFootstepHighlight : LeftFootstep;
 		case EFootstepType::Right:
-			return Footprint.IsHighlight ? RightFootstepHighlight : RightFootstep;
+			return Footprint.IsHighlighted ? RightFootstepHighlight : RightFootstep;
 		default:
 			return nullptr;
 	}
 }
 
-float UFootprintControllerComponent::GetFootprintLifetime(const FFootprintData& Footprint) const
+float UFootprintControllerComponent::ComputeLifetime(bool bHighlighted) const
 {
-	auto* Icons = GetOwner()->GetComponentByClass<UScannerIconsControllerComponent>();
+	float Lifetime = RegularFootprintLifetime + FadeTime;
 	
-	return Footprint.IsHighlight
-		? Icons->TotalEffectDuration() + HighlightFadeTime + FadeTime
-		: RegularFootprintLifetime + FadeTime;
+	if (bHighlighted)
+	{
+		double CurrentTime = GetWorld()->GetTimeSeconds();
+		double ElapsedTime = CurrentTime - Scanner->GetCurrentFrameScannerState().StartTime;
+			
+		Lifetime += FMath::Max(0.f, Icons->TotalEffectDuration() - ElapsedTime) + HighlightFadeTime;
+	}
+	
+	return Lifetime;
 }
 
+UMaterialInstanceDynamic* UFootprintControllerComponent::CreateFootstepDMI(bool bRight, bool bHighlighted) 
+{
+	auto* DMI = UMaterialInstanceDynamic::Create(DecalMaterial, this);
+	DMI->SetScalarParameterValue(TEXT("IsRight"), bRight ? 1.f : 0.f);
+	DMI->SetScalarParameterValue(TEXT("IsHighlighted"), bHighlighted ? 1.f : 0.f);
+	return DMI;
+}
 
 void DEBUG_PrintTArray(const TArray<FFootprintData>& Footprints)
 {
@@ -198,7 +216,7 @@ void DEBUG_PrintTArray(const TArray<FFootprintData>& Footprints)
 
 		Output += FString::Printf(TEXT("{%d%s}"), 
 			i, 
-			FP.IsHighlight ? TEXT(",h") : TEXT(""));
+			FP.IsHighlighted ? TEXT(",h") : TEXT(""));
 
 		if (i < Footprints.Num() - 1)
 		{
