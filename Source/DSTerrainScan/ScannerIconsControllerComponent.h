@@ -150,12 +150,6 @@ private: /* Blueprint-exposed parameters */
 	float FlareAnimationDuration = 0.35f;
 
 	
-	/* Water */
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Particle System|Water", meta = (AllowPrivateAccess = "true"))
-	float WaterLevelHeight = -3910.0f;
-
-	
 	/** Captures terrain depth into a texture (used to derive particle height). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Scene Capture", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneCaptureComponent2D> DepthSceneCapture;
