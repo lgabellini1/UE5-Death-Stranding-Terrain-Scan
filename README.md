@@ -1,3 +1,6 @@
+![Preview image #1](./preview1.png)
+![Preview image #2](./preview2.png)
+
 # Death Stranding Terrain Scan in Unreal Engine 5
 
 A gameplay implementation of the terrain scan mechanic from the 2019 game _Death Stranding_ in the Unreal Engine 5.
