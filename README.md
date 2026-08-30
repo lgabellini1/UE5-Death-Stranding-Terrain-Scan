@@ -13,7 +13,7 @@ indicators which provide visual aid for terrain navigation.
 The project consists of a demo map and a player character able to scan.
 
 A detailed rundown of the effect's implementation, along with various footage examples, can be found on my portfolio page at
-[this link](https://lgabellini1.github.io/projects/death-stranding-terrain-scan-ue5.html).
+[this link](https://lgabellini1.github.io/projects/death-stranding-terrain-scan-ue5/death-stranding-terrain-scan-ue5.html).
 
 # Info
 
